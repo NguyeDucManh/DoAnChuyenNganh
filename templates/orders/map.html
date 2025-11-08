@@ -1,0 +1,51 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Điều phối tuyến đường (OSM + OSRM)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html,body{height:100%;margin:0}
+    #map{height:100vh;width:100vw}
+    .top-bar{
+      position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
+      background:#fff;padding:8px 12px;border-radius:10px;display:flex;gap:8px;align-items:center;
+      box-shadow:0 6px 20px rgba(0,0,0,.15)
+    }
+    .btn{padding:8px 10px;border:0;border-radius:8px;cursor:pointer;background:#2563eb;color:#fff;font-weight:600}
+    .btn.gray{background:#64748b}
+    .btn.red{background:#ef4444}
+    #addressInput{padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;min-width:260px}
+    .panel{
+      position:fixed;right:12px;top:80px;z-index:1000;background:#fff;border-radius:10px;padding:10px 12px;
+      box-shadow:0 6px 20px rgba(0,0,0,.15);max-width:280px;max-height:60vh;overflow:auto;font:14px/1.4 system-ui,sans-serif
+    }
+    .badge{display:inline-flex;align-items:center;gap:6px;background:#f3f4f6;padding:4px 8px;border-radius:999px;margin:3px 0}
+    .muted{opacity:.7}
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <input id="addressInput" placeholder="Nhập địa chỉ…">
+    <button id="searchBtn" class="btn">Thêm điểm</button>
+    <button id="optBtn" class="btn">Tối ưu & vẽ</button>
+    <button id="undoBtn" class="btn gray">Xóa điểm cuối</button>
+    <button id="clearBtn" class="btn red">Xóa tất cả</button>
+    <button onclick="location.href='/'" class="btn gray">Trang chủ</button>
+  </div>
+
+  <div class="panel">
+    <div><b>Điểm dừng (click marker đơn hàng để chọn):</b></div>
+    <ol id="wpList" style="padding-left:18px;margin:6px 0 0 0"></ol>
+    <div id="stats" class="muted" style="margin-top:8px"></div>
+    <div class="muted" style="margin-top:6px">Mẹo: Ctrl+click trên bản đồ để thêm điểm tùy ý.</div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="{% static 'assets/js/map.js' %}"></script>
+</body>
+</html>

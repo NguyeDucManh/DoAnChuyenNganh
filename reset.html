@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Đặt lại mật khẩu</title>
+  <style>
+    :root { --bg:#0f1020; --card:rgba(22,22,36,.95); --accent:#00c897; --text:#fff; --muted:#c9c9d3; --err:#ff6b6b; --input:#2c2c3d; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text);display:grid;place-items:center}
+    .card{background:var(--card);width:min(92vw,420px);padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+    h2{margin:0 0 8px;color:var(--accent)}
+    .row{position:relative;margin-top:14px}
+    input{width:100%;padding:12px 44px 12px 12px;border-radius:10px;border:1px solid transparent;background:var(--input);color:var(--text);font-size:16px;outline:none}
+    input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,200,151,.25)}
+    .toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:0;color:#d0d0da;cursor:pointer;font-size:16px}
+    button.primary{width:100%;margin-top:14px;padding:12px 16px;border:0;border-radius:10px;background:var(--accent);color:#0b1c16;font-weight:700;cursor:pointer}
+    .msg{min-height:22px;margin-top:10px;color:var(--muted)}
+    .msg.ok{color:var(--accent)}
+    .msg.err{color:var(--err)}
+    a.link{color:#9ad1ff}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Đặt lại mật khẩu</h2>
+    <div id="status" class="msg">Đang kiểm tra liên kết…</div>
+
+    <div class="row">
+      <input id="pw1" type="password" placeholder="Mật khẩu mới (≥ 6 ký tự)" minlength="6" required />
+      <button id="t1" class="toggle" type="button">👁</button>
+    </div>
+    <div class="row">
+      <input id="pw2" type="password" placeholder="Nhập lại mật khẩu" minlength="6" required />
+      <button id="t2" class="toggle" type="button">👁</button>
+    </div>
+
+    <button id="btn" class="primary" disabled>Cập nhật mật khẩu</button>
+    <div class="msg">Quay lại <a class="link" href="login.html">Đăng nhập</a></div>
+  </div>
+
+<script>
+const API_BASE = "http://localhost:30022"; // đổi nếu backend chạy cổng khác
+const qs = (s)=>document.querySelector(s);
+const qsv = (s)=>qs(s).value.trim();
+
+function getToken(){
+  const sp = new URLSearchParams(location.search);
+  return sp.get("token") || "";
+}
+
+function toggleType(input, btn){
+  input.type = input.type === "password" ? "text" : "password";
+  btn.textContent = input.type === "password" ? "👁" : "🙈";
+}
+
+async function call(path, body, method="POST"){
+  const opts = { method, headers:{} };
+  if(method !== "GET" && body != null){
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(API_BASE + path, opts);
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+  return d;
+}
+
+(async () => {
+  const token = getToken();
+  const st = qs("#status");
+  const btn = qs("#btn");
+  const pw1 = qs("#pw1");
+  const pw2 = qs("#pw2");
+
+  // toggle eyes
+  qs("#t1").onclick = ()=>toggleType(pw1, qs("#t1"));
+  qs("#t2").onclick = ()=>toggleType(pw2, qs("#t2"));
+
+  // enter to submit
+  [pw1,pw2].forEach(i=>i.addEventListener("keydown", e=>{
+    if(e.key==="Enter") btn.click();
+  }));
+
+  if(!token){
+    st.textContent = "Thiếu token trong liên kết.";
+    st.className = "msg err";
+    btn.disabled = true;
+    return;
+  }
+
+  // validate token
+  try{
+    await call(`/api/password/validate?token=${encodeURIComponent(token)}`, null, "GET");
+    st.textContent = "Token hợp lệ. Nhập mật khẩu mới của bạn.";
+    st.className = "msg ok";
+    btn.disabled = false;
+  }catch(e){
+    st.textContent = e.message || "Token không hợp lệ/đã hết hạn.";
+    st.className = "msg err";
+    btn.disabled = true;
+    return;
+  }
+
+  btn.onclick = async ()=>{
+    const p1 = qsv("#pw1");
+    const p2 = qsv("#pw2");
+
+    if(p1.length < 6){
+      st.textContent = "Mật khẩu phải ≥ 6 ký tự.";
+      st.className = "msg err";
+      return;
+    }
+    if(p1 !== p2){
+      st.textContent = "Mật khẩu xác nhận không khớp.";
+      st.className = "msg err";
+      return;
+    }
+
+    btn.disabled = true;
+    try{
+      await call("/api/password/reset", { token, password: p1 }, "POST");
+      st.textContent = "Đổi mật khẩu thành công! Bạn có thể đăng nhập lại.";
+      st.className = "msg ok";
+      setTimeout(()=>location.href="login.html", 1200);
+    }catch(e){
+      st.textContent = e.message || "Không thể đổi mật khẩu lúc này.";
+      st.className = "msg err";
+      btn.disabled = false;
+    }
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Quản lý đơn hàng</title>
+  <link rel="stylesheet" href="{% static 'assets/css/style.css' %}" />
+  <style>
+    :root{--bg1:#fff6ec;--bg2:#e6f6ff;--card:#ffffff;--line:#e5e7eb;--text:#0f172a;--muted:#64748b;--primary:#2563eb;--primary-h:#1d4ed8}
+    body{background:linear-gradient(180deg,var(--bg1),var(--bg2));font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text)}
+    .container{max-width:1080px;margin:0 auto;padding:0 16px}
+    .wrap{padding:24px;background:var(--card);border-radius:16px;box-shadow:0 10px 26px rgba(2,6,23,.06)}
+    .site-header .header-inner{display:flex;align-items:center;justify-content:space-between;height:54px}
+    .btn{border:0;padding:8px 14px;border-radius:10px;cursor:pointer;background:var(--primary);color:#fff}
+    .btn:hover{background:var(--primary-h)}
+    .actions{display:flex;gap:8px;align-items:center}
+    input,select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+    form{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+    form>div{grid-column:span 6}
+    form>.full{grid-column:1/-1}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:15px;vertical-align:middle}
+    .suggest-list{list-style:none;margin:4px 0 0;padding:0;max-height:200px;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;background:#fff;position:absolute;left:0;right:0;z-index:30;display:none}
+    .suggest-list li{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9}
+    .suggest-list li:hover{background:#f8fafc}
+    .toast{position:fixed;bottom:24px;right:24px;background:#111827;color:#fff;padding:10px 16px;border-radius:10px;opacity:0;transition:.3s}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner container">
+    <a class="brand" href="{% url 'home' %}">Trang chủ</a>
+    <div class="header-actions">
+      <span class="user-badge">Xin chào, {{ request.user.username }}</span>
+      <button class="btn" onclick="location.href='{% url 'logout' %}'">Đăng xuất</button>
+    </div>
+  </div>
+</header>
+
+<section class="crud section">
+  <div class="wrap container">
+    <h1>Quản lý đơn hàng</h1>
+
+    <div class="actions" style="gap:12px;margin-bottom:12px">
+      <input id="searchBox" placeholder="🔍 Tìm theo mã hoặc tên KH..." />
+      <select id="filterStatus">
+        <option value="">Tất cả trạng thái</option>
+        <option value="new">Mới tạo</option>
+        <option value="shipping">Đang giao</option>
+        <option value="done">Hoàn thành</option>
+        <option value="cancel">Đã hủy</option>
+      </select>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button id="checkInBtn"  class="btn">Check-in</button>
+        <button id="checkOutBtn" class="btn">Check-out</button>
+      </div>
+    </div>
+
+    {% if request.user.is_staff %}
+    <form id="orderForm">
+      {% csrf_token %}
+      <input type="hidden" id="orderId" />
+
+      <div>
+        <label>Tên khách hàng</label>
+        <input id="customerName" required />
+      </div>
+      <div>
+        <label>Mã vận đơn</label>
+        <input id="trackingCode" required />
+      </div>
+
+      <div style="position:relative">
+        <label>Địa chỉ lấy hàng</label>
+        <input id="pickupAddress" placeholder="VD: 88 Vạn Kiếp, Bình Thạnh" autocomplete="off" />
+        <ul id="pickupSuggestions" class="suggest-list"></ul>
+        <input type="hidden" id="pickupLat" />
+        <input type="hidden" id="pickupLng" />
+        <input id="pickupHouse" placeholder="Số nhà (nếu có)" style="margin-top:6px" />
+      </div>
+
+      <div style="position:relative">
+        <label>Địa chỉ giao hàng</label>
+        <input id="dropAddress" placeholder="VD: 86 Lý Thường Kiệt, Tân Bình" autocomplete="off" />
+        <ul id="dropSuggestions" class="suggest-list"></ul>
+        <input type="hidden" id="dropLat" />
+        <input type="hidden" id="dropLng" />
+        <input id="dropHouse" placeholder="Số nhà (nếu có)" style="margin-top:6px" />
+      </div>
+
+      <div>
+        <label>Số điện thoại</label>
+        <input id="phone" />
+      </div>
+      <div>
+        <label>Trạng thái</label>
+        <select id="status">
+          <option value="new">Mới tạo</option>
+          <option value="shipping">Đang giao</option>
+          <option value="done">Hoàn thành</option>
+          <option value="cancel">Đã hủy</option>
+        </select>
+      </div>
+      <div>
+        <label>COD (₫)</label>
+        <input id="cod" type="number" min="0" value="0" />
+      </div>
+      <div class="actions full">
+        <button type="submit" id="submitBtn" class="btn">Thêm đơn hàng</button>
+        <button type="button" id="resetBtn" class="btn" style="background:#6b7280">Clear</button>
+      </div>
+    </form>
+    {% endif %}
+
+    <table id="orderTable">
+      <thead>
+        <tr>
+          <th>ID</th><th>Mã đơn</th><th>Tên KH</th><th>Địa chỉ</th>
+          <th>Điện thoại</th><th>COD</th><th>Trạng thái</th><th>Nhân viên</th><th>Điều phối</th>
+          {% if request.user.is_staff %}<th>Hành động</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h2 style="margin-top:24px">Bảng chấm công</h2>
+    <table id="attTable">
+      <thead><tr><th>#</th><th>Giờ vào</th><th>Giờ ra</th><th>Tổng giờ</th></tr></thead>
+      <tbody><tr><td colspan="4" style="text-align:center;opacity:.6">Đang tải…</td></tr></tbody>
+    </table>
+
+    <h2 style="margin-top:24px">Hiệu suất nhân sự</h2>
+    <div class="actions" style="gap:8px;margin-bottom:8px">
+      <input id="perfFrom" type="datetime-local" />
+      <input id="perfTo" type="datetime-local" />
+      <button id="perfReload" class="btn">Cập nhật</button>
+    </div>
+    <table id="perfTable">
+      <thead>
+        <tr>
+          <th>Nhân sự</th><th>Hoàn thành</th><th>Tổng đơn</th>
+          <th>COD (₫)</th><th>Giờ công</th><th>Đơn/giờ</th><th>Thời gian TB (h)</th>
+        </tr>
+      </thead>
+      <tbody><tr><td colspan="7" style="text-align:center;opacity:.6">Đang tải…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  window.APP_IS_STAFF = {{ request.user.is_staff|yesno:"true,false" }};
+  window.API_ORDERS = "{% url 'orders:orders-list' %}";
+  window.API_ATT    = "{% url 'orders:attendance_api' %}";
+  window.API_PERF   = "{% url 'orders:performance_stats' %}";
+</script>
+<script src="{% static 'assets/js/orders.js' %}"></script>
+
+<!-- ==== Thêm lại nút Điều phối ==== -->
+<script>
+(function(){
+  const tbody = document.querySelector('#orderTable tbody');
+  const IS_STAFF = {{ request.user.is_staff|yesno:"true,false" }};
+  function addRouteButtons(){
+    [...tbody.querySelectorAll('tr')].forEach(tr=>{
+      if (tr.querySelector('[data-route-btn]')) return;
+      const idCell = tr.querySelector('td');
+      if (!idCell) return;
+      const id = idCell.textContent.trim();
+      const btnTd = document.createElement('td');
+      btnTd.innerHTML = `<button data-route-btn class="btn" onclick="location.href='/orders/${id}/'">Điều phối</button>`;
+      const cells = tr.children;
+      if (IS_STAFF && cells.length > 0)
+        tr.insertBefore(btnTd, cells[cells.length-1]);
+      else tr.appendChild(btnTd);
+    });
+  }
+  new MutationObserver(addRouteButtons).observe(tbody, {childList:true, subtree:true});
+  document.addEventListener('DOMContentLoaded', addRouteButtons);
+})();
+</script>
+
+<!-- ==== Autocomplete ưu tiên Bình Thạnh ==== -->
+<script>
+const BTH={W:106.677,E:106.740,S:10.784,N:10.858};
+const inBinhThanh=(lat,lon)=>lon>=BTH.W&&lon<=BTH.E&&lat>=BTH.S&&lat<=BTH.N;
+
+function initAutoAddress(inputId,sugId,houseId,latId,lngId){
+  const inp=document.getElementById(inputId);
+  const sug=document.getElementById(sugId);
+  const house=document.getElementById(houseId);
+  const lat=document.getElementById(latId);
+  const lng=document.getElementById(lngId);
+  let timer;
+  async function search(q){
+    const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=VN&limit=8&q=${encodeURIComponent(q)}`;
+    const r=await fetch(url,{headers:{'Accept-Language':'vi','User-Agent':'deliverysys-demo'}});
+    const list=r.ok?await r.json():[];
+    list.sort((a,b)=>{
+      const sa=((a.display_name||'').includes('Bình Thạnh')||inBinhThanh(+a.lat,+a.lon))?1:0;
+      const sb=((b.display_name||'').includes('Bình Thạnh')||inBinhThanh(+b.lat,+b.lon))?1:0;
+      return sb-sa;
+    });
+    return list;
+  }
+  function render(list){
+    if(!list.length){sug.style.display='none';return;}
+    sug.innerHTML=list.map(p=>`<li data-lat="${p.lat}" data-lon="${p.lon}" data-house="${p.address?.house_number||''}">${p.display_name}</li>`).join('');
+    sug.style.display='block';
+  }
+  inp.addEventListener('input',()=>{
+    clearTimeout(timer);
+    const q=inp.value.trim();
+    if(q.length<3){sug.style.display='none';return;}
+    timer=setTimeout(async()=>{try{render(await search(q));}catch{sug.style.display='none';}},300);
+  });
+  sug.addEventListener('click',e=>{
+    const li=e.target.closest('li');if(!li)return;
+    inp.value=li.textContent.trim();
+    lat.value=li.dataset.lat;
+    lng.value=li.dataset.lon;
+    house.value=li.dataset.house;
+    sug.style.display='none';
+  });
+  document.addEventListener('click',e=>{
+    if(!sug.contains(e.target)&&e.target!==inp)sug.style.display='none';
+  });
+}
+initAutoAddress('pickupAddress','pickupSuggestions','pickupHouse','pickupLat','pickupLng');
+initAutoAddress('dropAddress','dropSuggestions','dropHouse','dropLat','dropLng');
+</script>
+</body>
+</html>

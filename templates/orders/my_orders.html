@@ -1,0 +1,25 @@
+{% load static %}
+<!DOCTYPE html><html lang="vi"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Đơn của {{ request.user.username }}</title>
+  <link rel="stylesheet" href="{% static 'assets/css/style.css' %}">
+  <style>.btn{padding:.45rem .8rem;border-radius:10px;border:1px solid var(--line)}
+  .row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid var(--line)}</style>
+</head>
+<body class="container">
+  <h1>{% if request.user.is_staff %}Tất cả đơn{% else %}Đơn của {{ request.user.username }}{% endif %}</h1>
+
+  {% for o in orders %}
+  <div class="row">
+    <div>
+      <strong>{{ o.code }}</strong> — {{ o.sender_address }} → {{ o.receiver_address }} ({{ o.status }})
+      {% if request.user.is_staff %}<small> • Giao cho: {{ o.assigned_to.username|default:"-" }}</small>{% endif %}
+    </div>
+    <div>
+      <a class="btn" href="{% url 'order_detail' o.id %}">Điều phối tuyến đường</a>
+    </div>
+  </div>
+  {% empty %}
+    <p>Không có đơn.</p>
+  {% endfor %}
+</body></html>

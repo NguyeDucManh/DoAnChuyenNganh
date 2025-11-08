@@ -1,0 +1,62 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Bảo mật & phân quyền</title>
+  <link rel="stylesheet" href="{% static 'assets/css/style.css' %}">
+  <style>
+    .admin-embed{margin-top:16px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+    .admin-embed header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eee}
+    .admin-embed iframe{width:100%;height:70vh;border:0}
+  </style>
+</head>
+<body>
+<section class="section container">
+  <h1>Chính sách bảo mật & phân quyền</h1>
+
+  <p>Xin chào, <b>{{ request.user.username }}</b>!</p>
+
+  <h3>Vai trò hiện tại</h3>
+  {% if request.user.is_staff %}
+    <p style="color:#22c55e"><b>Admin</b> — có thể tạo, sửa, xóa và phân công đơn hàng.</p>
+  {% else %}
+    <p style="color:#3b82f6"><b>Nhân viên</b> — chỉ xem và xử lý các đơn được giao.</p>
+  {% endif %}
+
+  <h4>Nhóm (Groups)</h4>
+  {% with grps=request.user.groups.all %}
+    {% if grps %}
+      <ul>
+        {% for g in grps %}<li>{{ g.name }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p><i>Chưa được gán vào nhóm nào.</i></p>
+    {% endif %}
+  {% endwith %}
+
+  <hr>
+
+  <h3>1) Phân quyền người dùng</h3>
+  <ul>
+    <li><b>Admin:</b> Toàn quyền quản lý dữ liệu.</li>
+    <li><b>Nhân viên:</b> Giới hạn trong các đơn của mình.</li>
+  </ul>
+
+  <h3>2) Xác thực JWT</h3>
+  <p>Hệ thống dùng token JWT cho API.</p>
+
+  {% if request.user.is_staff %}
+  <div class="admin-embed">
+    <header>
+      <strong>Quản trị Django (nhúng)</strong>
+      <a class="btn" href="/admin/" target="_blank" rel="noopener">Mở toàn màn hình</a>
+    </header>
+    <iframe src="/admin/"></iframe>
+  </div>
+  {% endif %}
+
+  <a href="{% url 'home' %}" class="btn" style="margin-top:20px">← Quay lại trang chủ</a>
+</section>
+</body>
+</html>

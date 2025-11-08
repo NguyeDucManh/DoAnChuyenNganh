@@ -1,0 +1,62 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Đăng nhập</title>
+  <link rel="stylesheet" href="{% static 'assets/css/auth.css' %}?v=6">
+</head>
+<body>
+  <div class="bg" style="background-image:url('{% static "assets/images/login.png" %}?v=6')"></div>
+
+  <main class="container">
+    <section class="card">
+      <header class="card__head">
+        <h1>Đăng nhập</h1>
+        <p class="sub">Vào hệ thống giao hàng</p>
+      </header>
+
+      {% if form.non_field_errors %}
+        <div class="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <form method="post" class="form">
+        {% csrf_token %}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+
+        <label class="field">
+          <span>Tài khoản</span>
+          <input name="username" type="text" autocomplete="username" required>
+          {{ form.username.errors }}
+        </label>
+
+        <label class="field">
+          <span>Mật khẩu</span>
+          <div class="pw">
+            <input id="pw" name="password" type="password" autocomplete="current-password" required>
+            <button type="button" class="pw__toggle" onclick="togglePw()" aria-label="Hiện/ẩn mật khẩu">👁️</button>
+          </div>
+          {{ form.password.errors }}
+        </label>
+
+        <button class="btn" type="submit">Đăng nhập</button>
+
+        <div class="meta" style="justify-content:space-between">
+          <a href="/">← Về trang chủ</a>
+          <a href="{% url 'password_reset' %}">Quên mật khẩu?</a>
+        </div>
+      </form>
+    </section>
+
+    <footer class="brand"><span class="logo">📦</span><span>DeliverySys</span></footer>
+  </main>
+
+  <script>
+    function togglePw(){
+      const i=document.getElementById('pw');
+      i.type = i.type==='password' ? 'text' : 'password';
+    }
+  </script>
+</body>
+</html>

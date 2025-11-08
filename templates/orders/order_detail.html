@@ -1,0 +1,364 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Đơn {{ order.code }}</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --bg:linear-gradient(135deg,#f6f7f9,#eef1f7);
+  --card:#fff;--line:#e5e7eb;--text:#0f172a;--muted:#64748b;--pri:#2563eb
+}
+[data-theme="dark"]{
+  --bg:linear-gradient(135deg,#0b1220,#111827);
+  --card:#0f172a;--line:#1f2940;--text:#e5e7eb;--muted:#94a3b8;--pri:#60a5fa
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);min-height:100vh}
+
+/* layout */
+.container{max-width:96%;margin:0 auto;padding:16px 20px}
+.wrap{display:grid;grid-template-columns:minmax(0,4fr) minmax(320px,1fr);gap:20px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(2,6,23,.06)}
+#map{height:calc(100vh - 180px);border-radius:16px}
+
+/* header + address row */
+.order-head{text-align:center;margin-bottom:12px}
+.brand-title{font-size:32px;font-weight:900;color:var(--pri);margin:6px 0 14px;text-shadow:0 2px 6px rgba(37,99,235,.2)}
+.sub{font-size:15px;color:var(--muted);margin-bottom:4px}
+.address-row{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin-bottom:8px}
+.addr-box{flex:1 1 420px;max-width:520px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:0 4px 20px rgba(0,0,0,.06);transition:transform .2s,box-shadow .2s}
+.addr-box:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.1)}
+.addr-head{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--pri);margin-bottom:6px}
+.addr-line{display:flex;align-items:flex-start;gap:8px;font-size:14px;color:var(--text);line-height:1.45}
+[data-theme="dark"] .addr-box{background:#1e293b;border-color:#334155;box-shadow:0 4px 18px rgba(0,0,0,.4)}
+
+/* right panel */
+.side{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto;padding:12px;background:rgba(255,255,255,.9);backdrop-filter:saturate(150%) blur(3px);border-radius:16px}
+[data-theme="dark"] .side{background:rgba(15,23,42,.9)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:4px 6px}
+.panel-title{display:flex;align-items:center;gap:8px;font-weight:800}
+.chipbar{display:flex;gap:8px;align-items:center;margin:6px 6px 10px}
+.chip{display:inline-flex;gap:6px;align-items:center;padding:7px 12px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-weight:700;font-size:13px}
+[data-theme="dark"] .chip{background:#1e293b;color:#93c5fd}
+.turns{list-style:none;margin:0;padding:0;border-top:1px dashed var(--line)}
+.turns li{display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px dashed var(--line);font-size:14px}
+.turns small{color:var(--muted)}
+.turns .dist{font-variant-numeric:tabular-nums}
+.ic{font-size:18px}
+
+/* toolbar under panel */
+.panel-actions{display:flex;justify-content:center;gap:10px;padding:12px 0 8px;border-top:1px dashed var(--line);margin-top:8px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:6px 12px;border-radius:10px;cursor:pointer;font-size:14px;transition:all .2s ease}
+.btn:hover{background:var(--pri);color:#fff;border-color:var(--pri)}
+.btn:active{transform:translateY(1px)}
+
+/* toast */
+.toast{position:fixed;right:24px;bottom:24px;background:#16a34a;color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;opacity:.95}
+
+@media (max-width:1024px){
+  .wrap{grid-template-columns:1fr}
+  #map{height:calc(100vh - 120px);min-height:480px}
+  .side{position:relative;top:auto;max-height:none}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="order-head">
+    <h1 class="brand-title">🚚 Giao Hàng Đức Mạnh</h1>
+    <div class="sub">Đơn <strong>{{ order.code }}</strong> — Giao cho: <strong>{{ order.assigned_to.username|default:"Chưa gán" }}</strong></div>
+    <div class="address-row">
+      <div class="addr-box" id="pickupBox">
+        <div class="addr-head">📦 Nơi gửi</div>
+        <div class="addr-line"><span>🚩</span><span id="pickupText">{{ order.pickup_address|default:order.address }}</span></div>
+      </div>
+      <div class="addr-box" id="dropBox">
+        <div class="addr-head">📍 Nơi nhận</div>
+        <div class="addr-line"><span>🏁</span><span id="dropText">{{ order.drop_address|default:"(chưa đặt)" }}</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <div id="map"
+           data-pickup="{{ order.pickup_lat }},{{ order.pickup_lng }}"
+           data-drop="{{ order.drop_lat }},{{ order.drop_lng }}"
+           data-pickup-addr="{{ order.pickup_address|default_if_none:'' }}"
+           data-drop-addr="{{ order.drop_address|default_if_none:'' }}">
+      </div>
+    </div>
+
+    <aside class="card side">
+      <div class="panel-head"><div class="panel-title">🧭 Hướng đi</div></div>
+      <div class="chipbar">
+        <div class="chip" id="chipDist">🚗 0 km</div>
+        <div class="chip" id="chipTime">⏱ 0 phút</div>
+      </div>
+      <ul id="turnList" class="turns">
+        <li><span class="ic">ℹ️</span><span>Đang tính tuyến…</span><span class="dist"></span></li>
+      </ul>
+      <div class="panel-actions">
+        <button class="btn" id="btnTheme">🌗 Giao diện</button>
+        <button class="btn" id="btnFitMap">🎯 Canh lại bản đồ</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ===== theme ===== */
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('theme',t)}
+function getTheme(){return localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}
+
+/* ===== const & utils ===== */
+const HCMC_BOX={W:106.36,E:107.03,S:10.28,N:11.25};
+const inBox=(lat,lng,box)=> lng>=box.W&&lng<=box.E&&lat>=box.S&&lat<=box.N;
+const BTH={W:106.677,E:106.740,S:10.784,N:10.858};
+const inBinhThanh=(lat,lng)=>inBox(lat,lng,BTH);
+
+const parseLatLng=s=>{const[lat,lng]=(s||'').split(',').map(Number);return{lat,lng}};
+const prettyDist=m=>m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(2)} km`;
+const prettyTime=s=>`${Math.max(1,Math.round(s/60))} phút`;
+const getCookie=n=>document.cookie.match('(^|;)\\s*'+n+'\\s*=\\s*([^;]+)')?.pop()||'';
+const haversine=(a,b)=>{const R=6371e3,φ1=a.lat*Math.PI/180,φ2=b.lat*Math.PI/180,Δφ=(b.lat-a.lat)*Math.PI/180,Δλ=(b.lng-a.lng)*Math.PI/180;const d=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;return R*2*Math.atan2(Math.sqrt(d),Math.sqrt(1-d))};
+
+/* ===== geocode ===== */
+async function geocodeNominatimHCM(q){
+  const viewbox='106.36,11.25,107.03,10.28';
+  const u=`https://nominatim.openstreetmap.org/search?format=jsonv2&bounded=1&viewbox=${viewbox}&countrycodes=vn&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
+  const r=await fetch(u,{headers:{'Accept-Language':'vi'}}); if(!r.ok) return null;
+  const a=(await r.json())[0]; return a?{lat:+a.lat,lng:+a.lon}:null;
+}
+async function geocodePhoton(q){
+  const u=`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=vi`;
+  const r=await fetch(u); if(!r.ok) return null;
+  const f=(await r.json())?.features?.[0]?.geometry?.coordinates;
+  return f?{lat:+f[1],lng:+f[0]}:null;
+}
+async function geocodeOSM(q){
+  const u=`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=vn&limit=1&addressdetails=1&q=${encodeURIComponent(q)}`;
+  const r=await fetch(u,{headers:{'Accept-Language':'vi'}}); if(!r.ok) return null;
+  const a=(await r.json())[0]; return a?{lat:+a.lat,lng:+a.lon}:null;
+}
+async function geocode(q){
+  if(!q) return null;
+  try{
+    const g1=await geocodeNominatimHCM(q); if(g1 && inBox(g1.lat,g1.lng,HCMC_BOX)) return g1;
+    const g2=await geocodePhoton(q);      if(g2 && inBox(g2.lat,g2.lng,HCMC_BOX)) return g2;
+    const g3=await geocodeOSM(q);         if(g3 && inBox(g3.lat,g3.lng,HCMC_BOX)) return g3;
+    return g1||g2||g3;
+  }catch{return null}
+}
+
+/* ===== OSRM ===== */
+const OSRM_HOSTS=[
+  'https://routing.openstreetmap.de',
+  'https://router.project-osrm.org',
+  'https://osrm.kk.my.id'
+];
+async function osrmNearest(lat,lng){
+  for(const h of OSRM_HOSTS){
+    try{
+      const r=await fetch(`${h}/nearest/v1/driving/${lng},${lat}`);
+      if(!r.ok) continue;
+      const j=await r.json(); const c=j?.waypoints?.[0]?.location;
+      if(c) return {lat:c[1],lng:c[0]};
+    }catch{}
+  }
+  return {lat,lng};
+}
+async function osrmRoute(p,d){
+  for(const h of OSRM_HOSTS){
+    try{
+      const u=`${h}/route/v1/driving/${p.lng},${p.lat};${d.lng},${d.lat}?overview=full&geometries=geojson&steps=true`;
+      const r=await fetch(u); if(!r.ok) continue;
+      const j=await r.json(); const r0=j?.routes?.[0];
+      if(r0) return {geometry:r0.geometry,distance:r0.distance,duration:r0.duration,legs:r0.legs||[]};
+    }catch{}
+  }
+  return null;
+}
+
+/* ===== turns render ===== */
+const icMap=(type,mod)=>{
+  if(type==='depart') return '⤴'; if(type==='arrive') return '🏁';
+  if(type==='roundabout') return '⟳'; if(type==='merge') return '⇶';
+  if(type==='fork') return mod?.includes('right')?'⤵':'⤶';
+  if(type==='new name') return '➡'; if(type==='continue') return '⬆';
+  if(type==='turn'){ if(mod==='right')return'↱'; if(mod==='slight right')return'↗'; if(mod==='left')return'↰'; if(mod==='slight left')return'↖'; if(mod==='uturn')return'⟲'; return '⬆';}
+  return '⬆';
+};
+function viTurn(type,mod){
+  if(type==='depart')return'Bắt đầu';
+  if(type==='arrive')return'Đến nơi';
+  if(type==='roundabout')return'Vào vòng xuyến';
+  if(type==='merge')return'Nhập làn';
+  if(type==='fork')return mod?.includes('right')?'Rẽ nhánh phải':'Rẽ nhánh trái';
+  if(type==='new name')return'Tiếp tục theo đường';
+  if(type==='continue')return'Đi thẳng';
+  if(type==='turn'){
+    if(mod==='right')return'Rẽ phải';
+    if(mod==='slight right')return'Chếch phải';
+    if(mod==='left')return'Rẽ trái';
+    if(mod==='slight left')return'Chếch trái';
+    if(mod==='uturn')return'Quay đầu';
+    return'Đi thẳng';
+  }
+  return'Đi thẳng';
+}
+function buildSteps(legs){
+  const ul=document.getElementById('turnList'); const items=[];
+  legs.forEach(leg=>leg.steps.forEach(s=>{
+    const m=s.maneuver||{};
+    items.push(`<li><span class="ic">${icMap(m.type,m.modifier)}</span><span>${viTurn(m.type,m.modifier)}<br><small>${s.name||'—'}</small></span><span class="dist">${prettyDist(s.distance)}</span></li>`);
+  }));
+  ul.innerHTML=items.join('')||'<li><span class="ic">ℹ</span><span>Không có bước chỉ đường</span><span></span></li>';
+}
+/* fallback khi thiếu steps */
+function buildStepsFromGeometry(geometry){
+  const ul=document.getElementById('turnList'); const coords=geometry?.coordinates||[];
+  if(coords.length<3){ul.innerHTML='<li><span class="ic">ℹ</span><span>Không có bước chỉ đường</span></li>';return;}
+  const toDeg=r=>r*180/Math.PI;
+  const bearing=([x1,y1],[x2,y2])=>{
+    const φ1=y1*Math.PI/180,φ2=y2*Math.PI/180,λ1=x1*Math.PI/180,λ2=x2*Math.PI/180;
+    const y=Math.sin(λ2-λ1)*Math.cos(φ2);
+    const x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(λ2-λ1);
+    return (toDeg(Math.atan2(y,x))+360)%360;
+  };
+  const dist=(a,b)=>{const R=6371e3,φ1=a[1]*Math.PI/180,φ2=b[1]*Math.PI/180,dφ=(b[1]-a[1])*Math.PI/180,dλ=(b[0]-a[0])*Math.PI/180;
+    const s=Math.sin(dφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(dλ/2)**2;return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));};
+  const items=[]; let prev=bearing(coords[0],coords[1]); let seg=0;
+  for(let i=1;i<coords.length-1;i++){
+    seg+=dist(coords[i-1],coords[i]); const b2=bearing(coords[i],coords[i+1]); let d=((b2-prev+540)%360)-180;
+    if(Math.abs(d)>=30){const L=d<0; items.push(`<li><span class="ic">${L?'↰':'↱'}</span><span>${L?'Rẽ trái':'Rẽ phải'}<br><small>—</small></span><span class="dist">${prettyDist(seg)}</span></li>`); seg=0; prev=b2;}
+  }
+  if(seg>5) items.push(`<li><span class="ic">⬆</span><span>Đi thẳng</span><span class="dist">${prettyDist(seg)}</span></li>`);
+  items.push(`<li><span class="ic">🏁</span><span>Đến nơi</span><span></span></li>`); ul.innerHTML=items.join('');
+}
+
+/* icons */
+const VAN_ICON=L.icon({iconUrl:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24"><g fill="none" stroke="#2563eb" stroke-width="1.8"><rect x="2.5" y="8" width="13" height="7" rx="1.5"/><path d="M15.5 10h3l3 3v2h-6z"/><circle cx="7" cy="17" r="2.2" fill="#fff"/><circle cx="18" cy="17" r="2.2" fill="#fff"/></g></svg>`),iconSize:[34,34],iconAnchor:[17,28]});
+const FLAG_ICON=L.icon({iconUrl:'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"><path fill="#ef4444" d="M6 3v18M6 4h10l-1.5 2L16 8H6z"/></svg>`),iconSize:[28,28],iconAnchor:[8,22]});
+const SHIPPER_ICON=L.icon({iconUrl:"{% static 'assets/images/shipper.jpg' %}",iconSize:[64,64],iconAnchor:[32,60],popupAnchor:[0,-50]});
+
+/* mark done */
+async function markDone(){
+  try{
+    await fetch(`/orders/api/orders/{{ order.id }}/`,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},body:JSON.stringify({status:'done'})});
+    const t=document.createElement('div');t.className='toast';t.textContent='✅ Đơn đã giao thành công';document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
+  }catch{}
+}
+
+/* animate shipper */
+function animateShipper(routeLayer,map){
+  const layers=routeLayer?.getLayers?.()||[]; if(!layers.length) return;
+  const latlngs=layers[0].getLatLngs(); if(!latlngs.length) return;
+  if(window.shipperMarker) map.removeLayer(window.shipperMarker);
+  window.shipperMarker=L.marker(latlngs[0],{icon:SHIPPER_ICON,zIndexOffset:1200}).addTo(map);
+  const SPEED=10; let i=0;
+  (function step(){ if(i>=latlngs.length-1) return; const a=latlngs[i],b=latlngs[i+1];
+    const ms=Math.max(30,(map.distance(a,b)/SPEED)*1000); window.shipperMarker.setLatLng(b); i++; setTimeout(step,ms);})();
+}
+
+/* main */
+document.addEventListener('DOMContentLoaded',async()=>{
+  applyTheme(getTheme());
+
+  const el=document.getElementById('map');
+  let pick=parseLatLng(el.dataset.pickup), drop=parseLatLng(el.dataset.drop);
+  const pickAddr=(el.dataset.pickupAddr||'').trim(), dropAddr=(el.dataset.dropAddr||'').trim();
+
+  if(!Number.isFinite(pick.lat)||!Number.isFinite(pick.lng)){const g=await geocode(pickAddr); if(g) pick=g;}
+  if(!Number.isFinite(drop.lat)||!Number.isFinite(drop.lng)){const g=await geocode(dropAddr); if(g) drop=g;}
+  if(!inBox(pick.lat,pick.lng,HCMC_BOX)&&inBox(drop.lat,drop.lng,HCMC_BOX)) pick=drop;
+  if(!inBox(drop.lat,drop.lng,HCMC_BOX)&&inBox(pick.lat,pick.lng,HCMC_BOX)) drop=pick;
+
+  const map=L.map('map',{zoomControl:true,worldCopyJump:true}).setView([pick.lat||10.776,pick.lng||106.701],13);
+
+  let tile=null;
+  function setTile(theme){
+    if(tile) map.removeLayer(tile);
+    const dark=theme==='dark';
+    const url=dark?'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png':'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const attr=dark?'&copy; OpenStreetMap, &copy; CARTO':'&copy; OpenStreetMap';
+    tile=L.tileLayer(url,{maxZoom:19,attribution:attr}).addTo(map);
+  }
+  setTile(getTheme());
+
+  // bottom buttons
+  document.getElementById('btnTheme').onclick=()=>{const cur=getTheme();const next=cur==='dark'?'light':'dark';applyTheme(next);setTile(next);};
+  document.getElementById('btnFitMap').onclick=()=>{if(window.routeLayer) map.fitBounds(window.routeLayer.getBounds(),{padding:[24,24]});};
+
+  const hasPick=Number.isFinite(pick.lat)&&Number.isFinite(pick.lng);
+  const hasDrop=Number.isFinite(drop.lat)&&Number.isFinite(drop.lng);
+  if(!(hasPick&&hasDrop)){
+    document.getElementById('turnList').innerHTML='<li><span class="ic">⚠</span><span>Thiếu tọa độ hoặc geocode lỗi</span><span></span></li>';
+    return;
+  }
+
+  if(inBinhThanh(pick.lat,pick.lng)) pick=await osrmNearest(pick.lat,pick.lng);
+  if(inBinhThanh(drop.lat,drop.lng)) drop=await osrmNearest(drop.lat,drop.lng);
+
+  const mPickup=L.marker([pick.lat,pick.lng],{icon:VAN_ICON,draggable:true}).addTo(map).bindPopup('Điểm lấy');
+  const mDrop  =L.marker([drop.lat,drop.lng],{icon:FLAG_ICON,draggable:true}).addTo(map).bindPopup('Điểm giao');
+  L.circleMarker([drop.lat,drop.lng],{radius:6,color:'#ef4444',fillColor:'#ef4444',fillOpacity:.9}).addTo(map);
+
+  let routeLayer=null;
+
+  async function drawRoute(P,D){
+    let data=null;
+    try{
+      const url="{% url 'orders:orders-route' pk=order.id %}?from="+`${P.lng},${P.lat}`+"&to="+`${D.lng},${D.lat}`;
+      const r=await fetch(url,{credentials:'same-origin'}); if(r.ok) data=await r.json();
+    }catch{}
+
+    let route=null;
+    if(!data){
+      route=await osrmRoute(P,D);
+      if(!route){
+        document.getElementById('turnList').innerHTML='<li><span class="ic">⚠</span><span>Không tính được tuyến</span><span></span></li>';
+        document.getElementById('chipDist').textContent='🚗 0 km';
+        document.getElementById('chipTime').textContent='⏱ 0 phút';
+        return;
+      }
+    }
+
+    const geometry=route?route.geometry:data.geometry;
+    if(routeLayer) map.removeLayer(routeLayer);
+    routeLayer=L.geoJSON({type:'Feature',geometry},{style:{color:'#2563eb',weight:5,opacity:.9}}).addTo(map);
+    window.routeLayer=routeLayer;
+    map.fitBounds(routeLayer.getBounds(),{padding:[24,24]});
+
+    const dist=route?route.distance:data.distance_m;
+    const dur =route?route.duration:data.duration_s;
+    document.getElementById('chipDist').textContent=prettyDist(dist);
+    document.getElementById('chipTime').textContent=prettyTime(dur);
+
+    if(route?.legs?.[0]?.steps?.length) buildSteps(route.legs);
+    else if(!route && geometry)        buildStepsFromGeometry(geometry);
+    else if(route?.geometry)           buildStepsFromGeometry(route.geometry);
+    else document.getElementById('turnList').innerHTML='<li><span class="ic">ℹ</span><span>Chưa có chỉ dẫn chi tiết</span><span></span></li>';
+
+    animateShipper(routeLayer,map);
+    if(haversine(P,D)<50) await markDone();
+  }
+
+  await drawRoute(pick,drop);
+
+  async function onDrag(e,isPickup){
+    let {lat,lng}=e.target.getLatLng();
+    if(inBinhThanh(lat,lng)){const s=await osrmNearest(lat,lng); lat=s.lat; lng=s.lng; e.target.setLatLng([lat,lng]);}
+    if(isPickup) pick={lat,lng}; else drop={lat,lng};
+    await drawRoute(pick,drop);
+  }
+  mPickup.on('dragend',e=>onDrag(e,true));
+  mDrop.on('dragend',e=>onDrag(e,false));
+});
+</script>
+</body>
+</html>
